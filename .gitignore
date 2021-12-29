@@ -1,0 +1,7 @@
+.vscode/
+*.o
+*.l.cc
+*.l.hh
+*.y.cc
+*.y.hh
+coolc
