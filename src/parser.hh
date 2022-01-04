@@ -8,6 +8,7 @@
 #include <cstdio>
 
 #include "ast.hh"
+#include "location.hh"
 
 namespace yy {
 

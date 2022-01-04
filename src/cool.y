@@ -342,5 +342,5 @@ expression: OBJECTID ASSIGN expression {
 
 void yy::Parser::error (const location_type& loc, const std::string& msg)
 {
-    std::cerr << loc << ": " << msg << '\n';
+    std::cerr << loc << ": " << msg << std::endl;
 }

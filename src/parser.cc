@@ -34,7 +34,7 @@ void Parser::parse() {
   ptr_file.reset();
 
   if (nerrs > 0) {
-    throw SyntaxError(std::to_string(nerrs) + " syntax error(s)");
+    throw SyntaxError(std::to_string(nerrs) + " error(s)");
   }
 }
 

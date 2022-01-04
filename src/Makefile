@@ -4,8 +4,11 @@ all: build
 
 build: coolc
 
-SRCS := cool.l.cc cool.y.cc ast.cc parser.cc main.cc
+SRCS := cool.l.cc cool.y.cc ast.cc parser.cc main.cc sa.cc
 OBJS := $(patsubst %.cc,%.o,$(SRCS))
+DEPS := $(patsubst %.cc,%.d,$(SRCS))
+
+-include $(DEPS)
 
 coolc: $(OBJS)
 	$(CXX) $(CXXFLAGS) -o $@ $^
@@ -16,7 +19,7 @@ cool.l.cc cool.y.cc: cool.l cool.y
 	$(SED) -i -e 's@^#line@//#line@' cool.l.cc
 
 %.o: %.cc
-	$(CXX) $(CXXFLAGS) -c $^
+	$(CXX) $(CXXFLAGS) -MMD -c $<
 
 clean:
-	$(RM) cool.l.cc cool.y.cc cool.l.hh cool.y.hh location.hh $(OBJS) coolc
+	$(RM) cool.l.cc cool.y.cc cool.l.hh cool.y.hh location.hh *.gch $(OBJS) $(DEPS) coolc

@@ -2,16 +2,26 @@
 #define _AST_HH
 
 #include <list>
+#include <map>
 #include <memory>
 #include <string>
 
 #include "location.hh"
 
+namespace cool {
+class SemanticAnalyser;
+}
+
 namespace ast {
+
+class Class;
+class Method;
 
 class Node {
 public:
   void set_loc(const yy::location &l) { loc = l; }
+
+  const yy::location &get_loc() { return loc; }
 
   virtual void print(std::ostream &o, int indent) {}
 
@@ -19,7 +29,10 @@ protected:
   yy::location loc;
 };
 
-class Expression : public Node {};
+class Expression : public Node {
+public:
+  virtual Class *type(cool::SemanticAnalyser *sa) { return nullptr; };
+};
 
 class Void : public Expression {};
 
@@ -32,6 +45,10 @@ public:
 
   std::string name;
   std::shared_ptr<Expression> expr;
+
+  // --- sa ---
+public:
+  Class *type(cool::SemanticAnalyser *sa) override;
 };
 
 class Invoke : public Expression {
@@ -47,6 +64,14 @@ public:
 
   std::string name;
   std::list<std::shared_ptr<Expression>> arguments;
+
+  // --- sa ---
+public:
+  std::shared_ptr<Expression> expr2;
+  Class *type2;
+  Method *method;
+
+  Class *type(cool::SemanticAnalyser *sa) override;
 };
 
 class If : public Expression {
@@ -58,6 +83,10 @@ public:
   void print(std::ostream &o, int indent) override;
 
   std::shared_ptr<Expression> a, b, c;
+
+  // --- sa ---
+public:
+  Class *type(cool::SemanticAnalyser *sa) override;
 };
 
 class While : public Expression {
@@ -68,6 +97,10 @@ public:
   void print(std::ostream &o, int indent) override;
 
   std::shared_ptr<Expression> a, b;
+
+  // --- sa ---
+public:
+  Class *type(cool::SemanticAnalyser *sa) override;
 };
 
 class Block : public Expression {
@@ -78,6 +111,10 @@ public:
   void print(std::ostream &o, int indent) override;
 
   std::list<std::shared_ptr<Expression>> expressions;
+
+  // --- sa ---
+public:
+  Class *type(cool::SemanticAnalyser *sa) override;
 };
 
 class Let : public Expression {
@@ -92,6 +129,10 @@ public:
   std::string type_name;
   std::shared_ptr<Expression> expr;
   std::shared_ptr<Expression> body;
+
+  // --- sa ---
+public:
+  Class *type(cool::SemanticAnalyser *sa) override;
 };
 
 class CaseBranch : public Node {
@@ -117,6 +158,10 @@ public:
 
   std::shared_ptr<Expression> expr;
   std::list<std::shared_ptr<CaseBranch>> branches;
+
+  // --- sa ---
+public:
+  Class *type(cool::SemanticAnalyser *sa) override;
 };
 
 class New : public Expression {
@@ -126,6 +171,10 @@ public:
   void print(std::ostream &o, int indent) override;
 
   std::string type_name;
+
+  // --- sa ---
+public:
+  Class *type(cool::SemanticAnalyser *sa) override;
 };
 
 class IsVoid : public Expression {
@@ -135,6 +184,10 @@ public:
   void print(std::ostream &o, int indent) override;
 
   std::shared_ptr<Expression> expr;
+
+  // --- sa ---
+public:
+  Class *type(cool::SemanticAnalyser *sa) override;
 };
 
 class Add : public Expression {
@@ -145,6 +198,10 @@ public:
   void print(std::ostream &o, int indent) override;
 
   std::shared_ptr<Expression> a, b;
+
+  // --- sa ---
+public:
+  Class *type(cool::SemanticAnalyser *sa) override;
 };
 
 class Sub : public Expression {
@@ -155,6 +212,10 @@ public:
   void print(std::ostream &o, int indent) override;
 
   std::shared_ptr<Expression> a, b;
+
+  // --- sa ---
+public:
+  Class *type(cool::SemanticAnalyser *sa) override;
 };
 
 class Mul : public Expression {
@@ -165,6 +226,10 @@ public:
   void print(std::ostream &o, int indent) override;
 
   std::shared_ptr<Expression> a, b;
+
+  // --- sa ---
+public:
+  Class *type(cool::SemanticAnalyser *sa) override;
 };
 
 class Div : public Expression {
@@ -175,6 +240,10 @@ public:
   void print(std::ostream &o, int indent) override;
 
   std::shared_ptr<Expression> a, b;
+
+  // --- sa ---
+public:
+  Class *type(cool::SemanticAnalyser *sa) override;
 };
 
 class Neg : public Expression {
@@ -184,6 +253,10 @@ public:
   void print(std::ostream &o, int indent) override;
 
   std::shared_ptr<Expression> expr;
+
+  // --- sa ---
+public:
+  Class *type(cool::SemanticAnalyser *sa) override;
 };
 
 class LessThan : public Expression {
@@ -194,6 +267,10 @@ public:
   void print(std::ostream &o, int indent) override;
 
   std::shared_ptr<Expression> a, b;
+
+  // --- sa ---
+public:
+  Class *type(cool::SemanticAnalyser *sa) override;
 };
 
 class Equal : public Expression {
@@ -204,6 +281,10 @@ public:
   void print(std::ostream &o, int indent) override;
 
   std::shared_ptr<Expression> a, b;
+
+  // --- sa ---
+public:
+  Class *type(cool::SemanticAnalyser *sa) override;
 };
 
 class LessOrEqual : public Expression {
@@ -214,6 +295,10 @@ public:
   void print(std::ostream &o, int indent) override;
 
   std::shared_ptr<Expression> a, b;
+
+  // --- sa ---
+public:
+  Class *type(cool::SemanticAnalyser *sa) override;
 };
 
 class Not : public Expression {
@@ -223,6 +308,10 @@ public:
   void print(std::ostream &o, int indent) override;
 
   std::shared_ptr<Expression> expr;
+
+  // --- sa ---
+public:
+  Class *type(cool::SemanticAnalyser *sa) override;
 };
 
 class Var : public Expression {
@@ -232,6 +321,10 @@ public:
   void print(std::ostream &o, int indent) override;
 
   std::string name;
+
+  // --- sa ---
+public:
+  Class *type(cool::SemanticAnalyser *sa) override;
 };
 
 class IntConst : public Expression {
@@ -241,6 +334,10 @@ public:
   void print(std::ostream &o, int indent) override;
 
   int value;
+
+  // --- sa ---
+public:
+  Class *type(cool::SemanticAnalyser *sa) override;
 };
 
 class StrConst : public Expression {
@@ -252,6 +349,10 @@ public:
   std::string escaped();
 
   std::string value;
+
+  // --- sa ---
+public:
+  Class *type(cool::SemanticAnalyser *sa) override;
 };
 
 class BoolConst : public Expression {
@@ -261,6 +362,10 @@ public:
   void print(std::ostream &o, int indent) override;
 
   bool value;
+
+  // --- sa ---
+public:
+  Class *type(cool::SemanticAnalyser *sa) override;
 };
 
 class Feature : public Node {};
@@ -276,6 +381,10 @@ public:
   std::string name;
   std::string type_name;
   std::shared_ptr<Expression> expr;
+
+  // --- sa ---
+public:
+  bool check_type(cool::SemanticAnalyser *sa);
 };
 
 class Formal : public Node {
@@ -302,6 +411,11 @@ public:
   std::list<std::shared_ptr<Formal>> formals;
   std::string ret_type_name;
   std::shared_ptr<Expression> expr;
+
+  // --- sa ---
+public:
+  bool same_signature(Method *other);
+  bool check_type(cool::SemanticAnalyser *sa);
 };
 
 class Class : public Node {
@@ -315,6 +429,24 @@ public:
   std::string name;
   std::string parent_name;
   std::list<std::shared_ptr<Feature>> features;
+
+  // --- sa ---
+public:
+  void append_child(Class *child);
+
+  void print_hierarchy(std::ostream &o, int indent);
+  void print_hierarchy(std::ostream &o) { print_hierarchy(o, 0); }
+
+  Class *get_method_class(std::string name);
+  Method *get_method(std::string name);
+
+  void check_type(cool::SemanticAnalyser *sa);
+
+  Class *parent;
+  std::list<Class *> children;
+
+  std::map<std::string, Field *> name2Field;
+  std::map<std::string, Method *> name2Method;
 };
 
 class Program {

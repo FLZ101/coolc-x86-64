@@ -4,4 +4,6 @@
 *.l.hh
 *.y.cc
 *.y.hh
+*.d
+*.gch
 coolc

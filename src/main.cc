@@ -3,6 +3,7 @@
 #include <vector>
 
 #include "parser.hh"
+#include "sa.hh"
 
 int main(int argc, char *argv[]) {
   std::vector<std::string> filenames;
@@ -13,4 +14,9 @@ int main(int argc, char *argv[]) {
   auto parser = cool::Parser(filenames);
   parser.parse();
   parser.program->print(std::cout);
+
+  auto sa = cool::SemanticAnalyser(parser.program);
+  sa.analyse();
+
+  return 0;
 }
