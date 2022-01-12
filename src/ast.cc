@@ -1,8 +1,8 @@
 #include "ast.hh"
 
-#include <sstream>
-
+#include "cg.hh"
 #include "sa.hh"
+#include "util.hh"
 
 namespace ast {
 
@@ -31,6 +31,12 @@ Class *Assign::type(cool::SemanticAnalyser *sa) {
   return right;
 }
 
+void Assign::generate(cool::CodeGenerator *cg, std::ostream &o) {
+  o << "  # ASSIGN " + name + "\n";
+  expr->generate(cg, o);
+  o << "  movq %rax, " + cg->scope.find(name) + "\n";
+}
+
 void Invoke::print(std::ostream &o, int indent) {
   o << std::string(indent, ' ') << "INVOKE"
     << " @" << loc << std::endl;
@@ -45,31 +51,31 @@ void Invoke::print(std::ostream &o, int indent) {
 }
 
 Class *Invoke::type(cool::SemanticAnalyser *sa) {
-  expr2 = expr;
-  if (std::dynamic_pointer_cast<Void>(expr2)) {
-    expr2 = std::make_shared<Var>("self");
+  expr_sa = expr;
+  if (std::dynamic_pointer_cast<Void>(expr_sa)) {
+    expr_sa = std::make_shared<Var>("self");
   }
 
-  auto expr2_type = expr2->type(sa);
-  if (expr2_type == sa->errorClass.get()) {
-    return expr2_type;
+  auto expr_sa_type = expr_sa->type(sa);
+  if (expr_sa_type == sa->errorClass.get()) {
+    return expr_sa_type;
   }
 
-  type2 = sa->selfClass;
+  type_sa = expr_sa_type;
   if (!type_name.empty()) {
     if (sa->name2Class.find(type_name) == sa->name2Class.end()) {
       sa->error(get_loc(), "undefined class \"" + type_name + "\"");
       return sa->errorClass.get();
     }
-    type2 = sa->name2Class[type_name].get();
+    type_sa = sa->name2Class[type_name].get();
   }
 
-  if (!sa->assignable(type2, expr2_type)) {
+  if (!sa->assignable(type_sa, expr_sa_type)) {
     sa->error(get_loc(), "type error");
     return sa->errorClass.get();
   }
 
-  method = type2->get_method(name);
+  auto method = type_sa->get_method(name);
   if (!method) {
     sa->error(get_loc(), "undefined method \"" + name + "\"");
     return sa->errorClass.get();
@@ -105,6 +111,45 @@ Class *Invoke::type(cool::SemanticAnalyser *sa) {
   return sa->name2Class[method->ret_type_name].get();
 }
 
+void Invoke::generate(cool::CodeGenerator *cg, std::ostream &o) {
+  o << "  # INVOKE " + name + "\n";
+
+  o << "  pushq %rbx\n"; // save rbx
+  cg->offset_rbp++;
+
+  // push arguments
+  for (auto it = arguments.rbegin(); it != arguments.rend(); ++it) {
+    it->get()->generate(cg, o);
+    o << "  pushq %rax\n";
+    cg->offset_rbp++;
+  }
+
+  expr_sa->generate(cg, o);
+
+  o << "  cmpq $0, %rax\n";
+  o << "  je _invoke_on_void\n";
+
+  o << "  movq %rax, %rbx\n"; // this
+
+  // invoke
+
+  if (type_name.empty()) {
+    o << "  movq 32(%rbx), %rax\n"; // method table
+  } else {
+    o << "  movq $" + type_sa->name + "_method_table, %rax\n"; // method table
+  }
+
+  o << "  call *" + std::to_string(type_sa->methods_numbered[name] * 8) +
+           "(%rax)\n";
+
+  o << "  addq $" + std::to_string(arguments.size() * 8) +
+           ", %rsp\n"; // pop arguments
+  cg->offset_rbp -= arguments.size();
+
+  o << "  popq %rbx\n"; // restore rbx
+  cg->offset_rbp -= 1;
+}
+
 void If::print(std::ostream &o, int indent) {
   o << std::string(indent, ' ') << "IF"
     << " @" << loc << std::endl;
@@ -137,6 +182,20 @@ Class *If::type(cool::SemanticAnalyser *sa) {
   return sa->common_ancestor(b_type, c_type);
 }
 
+void If::generate(cool::CodeGenerator *cg, std::ostream &o) {
+  auto label_1 = cg->next_label();
+  auto label_2 = cg->next_label();
+  o << "  # IF\n";
+  a->generate(cg, o);
+  o << "  cmpq $0, 40(%rax)\n";
+  o << "  je " + label_1 + "\n";
+  b->generate(cg, o);
+  o << "  jmp " + label_2 + "\n";
+  o << label_1 + ":\n";
+  c->generate(cg, o);
+  o << label_2 + ":\n";
+}
+
 void While::print(std::ostream &o, int indent) {
   o << std::string(indent, ' ') << "WHILE"
     << " @" << loc << std::endl;
@@ -160,7 +219,33 @@ Class *While::type(cool::SemanticAnalyser *sa) {
     return b_type;
   }
 
-  return b_type;
+  return sa->objectClass.get();
+}
+
+void While::generate(cool::CodeGenerator *cg, std::ostream &o) {
+  auto label_1 = cg->next_label();
+  auto label_2 = cg->next_label();
+
+  o << "  # WHILE\n";
+  o << "  xorq %rax, %rax\n";
+
+  o << label_1 + ":\n";
+  o << "  pushq %rax\n"; // save rax
+  cg->offset_rbp++;
+
+  a->generate(cg, o);
+
+  o << "  popq %rcx\n"; // restore
+  cg->offset_rbp--;
+
+  o << "  cmpq $0, 40(%rax)\n";
+  o << "  je " + label_2 + "\n";
+
+  b->generate(cg, o);
+  o << "  jmp " + label_1 + "\n";
+
+  o << label_2 + ":\n";
+  o << "  movq %rcx, %rax\n";
 }
 
 void Block::print(std::ostream &o, int indent) {
@@ -184,6 +269,13 @@ Class *Block::type(cool::SemanticAnalyser *sa) {
     return sa->errorClass.get();
   }
   return expressions.back()->type(sa);
+}
+
+void Block::generate(cool::CodeGenerator *cg, std::ostream &o) {
+  o << "  # BLOCK\n";
+  for (auto &expr : expressions) {
+    expr->generate(cg, o);
+  }
 }
 
 void Let::print(std::ostream &o, int indent) {
@@ -217,6 +309,39 @@ Class *Let::type(cool::SemanticAnalyser *sa) {
   return res;
 }
 
+void Let::generate(cool::CodeGenerator *cg, std::ostream &o) {
+  o << "  # LET " + name + "\n";
+  o << "  pushq $0\n"; // a local variable
+  cg->offset_rbp++;
+
+  cg->scope.enter();
+  cg->scope.add(name, std::to_string(cg->offset_rbp * (-8)) + "(%rbp)");
+
+  expr_cg = expr;
+  if (std::dynamic_pointer_cast<Void>(expr_cg)) {
+    auto cls = cg->sa->name2Class[type_name];
+    if (cls == cg->sa->stringClass) {
+      expr_cg = std::make_shared<StrConst>("");
+    } else if (cls == cg->sa->intClass) {
+      expr_cg = std::make_shared<IntConst>(0);
+    } else if (cls == cg->sa->boolClass) {
+      expr_cg = std::make_shared<BoolConst>(false);
+    }
+  }
+
+  if (!std::dynamic_pointer_cast<Void>(expr_cg)) {
+    expr_cg->generate(cg, o);
+    o << "  movq %rax, " + cg->scope.find(name) + "\n";
+  }
+
+  body->generate(cg, o);
+
+  cg->scope.exit();
+
+  o << "  popq %rcx\n";
+  cg->offset_rbp--;
+}
+
 void CaseBranch::print(std::ostream &o, int indent) {
   o << std::string(indent, ' ') << name << " : " << type_name << " @" << loc
     << std::endl;
@@ -247,18 +372,20 @@ Class *Case::type(cool::SemanticAnalyser *sa) {
       err = true;
       continue;
     }
-    auto branch_type = sa->name2Class[branch->type_name].get();
-    if (!sa->assignable(expr_type, branch_type) &&
-        !sa->assignable(branch_type, expr_type)) {
+    branch->type = sa->name2Class[branch->type_name].get();
+    if (!sa->assignable(expr_type, branch->type) &&
+        !sa->assignable(branch->type, expr_type)) {
       sa->error(branch->get_loc(), "type error");
       err = true;
       continue;
     }
 
-    sa->scope.enter().add(branch->name, branch_type);
-    auto branch_expr_type = branch->expr->type(sa);
-    if (branch_expr_type == sa->errorClass.get()) {
+    sa->scope.enter().add(branch->name, branch->type);
+    branch->expr_type = branch->expr->type(sa);
+    if (branch->expr_type == sa->errorClass.get()) {
       err = true;
+    } else {
+      branch_expr_types.push_back(branch->expr_type);
     }
     sa->scope.exit();
   }
@@ -268,6 +395,44 @@ Class *Case::type(cool::SemanticAnalyser *sa) {
   }
 
   return sa->common_ancestor(branch_expr_types);
+}
+
+void Case::generate(cool::CodeGenerator *cg, std::ostream &o) {
+  o << "  # CASE\n";
+  expr->generate(cg, o);
+
+  o << "  cmpq $0, %rax\n";
+  o << "  je _case_on_void\n";
+
+  auto label_done = cg->next_label();
+
+  for (auto &branch : branches) {
+    auto label_1 = cg->next_label();
+
+    o << "  cmpq $" + std::to_string(branch->type->id) +
+             ", 16(%rax)\n"; // compare class id
+    o << "  jne " + label_1 + "\n";
+
+    o << "  pushq %rax\n"; // a new local variable
+    cg->offset_rbp++;
+    cg->scope.enter();
+    cg->scope.add(branch->name,
+                  std::to_string(cg->offset_rbp * (-8)) + "(%rbp)");
+
+    branch->expr->generate(cg, o);
+
+    o << "  popq %rcx\n";
+    cg->offset_rbp--;
+    cg->scope.exit();
+
+    o << "  jmp " + label_done + "\n";
+
+    o << label_1 + ":\n";
+  }
+
+  o << "  jmp _case_no_match\n";
+
+  o << label_done + ":\n";
 }
 
 void New::print(std::ostream &o, int indent) {
@@ -280,7 +445,32 @@ Class *New::type(cool::SemanticAnalyser *sa) {
     sa->error(get_loc(), "unknown type \"" + type_name + "\"");
     return sa->errorClass.get();
   }
-  return sa->name2Class[type_name].get();
+  type_sa = sa->name2Class[type_name].get();
+  return type_sa;
+}
+
+void new_generate(cool::CodeGenerator *cg, std::ostream &o, Class *cls) {
+  o << "  pushq %rbx\n"; // save rbx
+
+  // invoke `copy` method of the prototype object
+  o << "  movq $" + cls->name + "_prototype, %rbx\n"; // this
+  o << "  movq $" + cls->name + "_method_table, %rax\n";
+  o << "  call *" + std::to_string(cls->methods_numbered["copy"] * 8) +
+           "(%rax)\n";
+
+  // invoke `__init__` method of the new object
+  o << "  movq %rax, %rbx\n";
+  o << "  movq $" + cls->name + "_method_table, %rax\n";
+  o << "  call *" +
+           std::to_string(cls->methods_numbered[cool::init_method_name] * 8) +
+           "(%rax)\n";
+
+  o << "  popq %rbx\n"; // restore rbx
+}
+
+void New::generate(cool::CodeGenerator *cg, std::ostream &o) {
+  o << "  # NEW " + type_name + "\n";
+  new_generate(cg, o, type_sa);
 }
 
 void IsVoid::print(std::ostream &o, int indent) {
@@ -294,6 +484,19 @@ Class *IsVoid::type(cool::SemanticAnalyser *sa) {
     return sa->errorClass.get();
   }
   return sa->boolClass.get();
+}
+
+void IsVoid::generate(cool::CodeGenerator *cg, std::ostream &o) {
+  o << "  # ISVOID\n";
+  expr->generate(cg, o);
+
+  o << "  cmpq $0, %rax\n";
+  o << "  je 1f\n";
+  o << "  movq $bool_constant_false, %rax\n";
+  o << "  jmp 2f\n";
+  o << "1:\n";
+  o << "  movq $bool_constant_true, %rax\n";
+  o << "2:\n";
 }
 
 void Add::print(std::ostream &o, int indent) {
@@ -333,6 +536,52 @@ Class *Add::type(cool::SemanticAnalyser *sa) {
   return int_op_type(sa, std::list<std::shared_ptr<Expression>>{a, b});
 }
 
+void int_op_generate(cool::CodeGenerator *cg, std::ostream &o, Expression *a,
+                     Expression *b, char op) {
+  b->generate(cg, o);
+  o << "  movq 40(%rax), %rax\n"; // 2nd operand
+
+  o << "  pushq %rax\n";
+  cg->offset_rbp++;
+
+  a->generate(cg, o);
+  o << "  movq 40(%rax), %rax\n"; // 1st operand
+
+  o << "  popq %rcx\n"; // 2nd operand
+  cg->offset_rbp--;
+
+  switch (op) {
+  case '+':
+    o << "  addq %rcx, %rax\n";
+    break;
+  case '-':
+    o << "  subq %rcx, %rax\n";
+    break;
+  case '*':
+    o << "  imulq %rcx\n";
+    break;
+  case '/':
+    o << "  cqto\n"; // Convert quadword in %rax to octoword in %rdx:%rax
+    o << "  idivq %rcx\n";
+    break;
+  }
+
+  o << "  pushq %rax\n";
+  cg->offset_rbp++;
+
+  new_generate(cg, o, cg->sa->intClass.get());
+
+  o << "  popq %rcx\n";
+  cg->offset_rbp--;
+
+  o << "  movq %rcx, 40(%rax)\n";
+}
+
+void Add::generate(cool::CodeGenerator *cg, std::ostream &o) {
+  o << "  # ADD\n";
+  int_op_generate(cg, o, a.get(), b.get(), '+');
+}
+
 void Sub::print(std::ostream &o, int indent) {
   o << std::string(indent, ' ') << "-"
     << " @" << loc << std::endl;
@@ -342,6 +591,11 @@ void Sub::print(std::ostream &o, int indent) {
 
 Class *Sub::type(cool::SemanticAnalyser *sa) {
   return int_op_type(sa, std::list<std::shared_ptr<Expression>>{a, b});
+}
+
+void Sub::generate(cool::CodeGenerator *cg, std::ostream &o) {
+  o << "  # SUB\n";
+  int_op_generate(cg, o, a.get(), b.get(), '-');
 }
 
 void Mul::print(std::ostream &o, int indent) {
@@ -355,6 +609,11 @@ Class *Mul::type(cool::SemanticAnalyser *sa) {
   return int_op_type(sa, std::list<std::shared_ptr<Expression>>{a, b});
 }
 
+void Mul::generate(cool::CodeGenerator *cg, std::ostream &o) {
+  o << "  # MUL\n";
+  int_op_generate(cg, o, a.get(), b.get(), '*');
+}
+
 void Div::print(std::ostream &o, int indent) {
   o << std::string(indent, ' ') << "/"
     << " @" << loc << std::endl;
@@ -366,6 +625,11 @@ Class *Div::type(cool::SemanticAnalyser *sa) {
   return int_op_type(sa, std::list<std::shared_ptr<Expression>>{a, b});
 }
 
+void Div::generate(cool::CodeGenerator *cg, std::ostream &o) {
+  o << "  # DIV\n";
+  int_op_generate(cg, o, a.get(), b.get(), '/');
+}
+
 void Neg::print(std::ostream &o, int indent) {
   o << std::string(indent, ' ') << "not"
     << " @" << loc << std::endl;
@@ -374,6 +638,57 @@ void Neg::print(std::ostream &o, int indent) {
 
 Class *Neg::type(cool::SemanticAnalyser *sa) {
   return int_op_type(sa, std::list<std::shared_ptr<Expression>>{expr});
+}
+
+void Neg::generate(cool::CodeGenerator *cg, std::ostream &o) {
+  o << "  # NEG\n";
+  expr->generate(cg, o);
+
+  o << "  xorq %rcx, %rcx\n";
+  o << "  subq 40(%rax), %rcx\n";
+  o << "  pushq %rcx\n";
+  cg->offset_rbp++;
+
+  new_generate(cg, o, cg->sa->intClass.get());
+
+  o << "  popq %rcx\n";
+  cg->offset_rbp--;
+
+  o << "  movq %rcx, 40(%rax)\n";
+}
+
+void int_rel_op_generate(cool::CodeGenerator *cg, std::ostream &o,
+                         Expression *a, Expression *b, char op) {
+  a->generate(cg, o);
+  o << "  movq 40(%rax), %rax\n"; // 1st operand
+
+  o << "  pushq %rax\n";
+  cg->offset_rbp++;
+
+  b->generate(cg, o);
+  o << "  movq 40(%rax), %rax\n"; // 2nd operand
+
+  o << "  popq %rcx\n"; // 1st operand
+  cg->offset_rbp--;
+
+  o << "  cmpq %rax, %rcx\n";
+
+  switch (op) {
+  case '<':
+    o << "  jl 1f\n";
+    break;
+  case '=':
+    o << "  je 1f\n";
+    break;
+  case '[':
+    o << "  jle 1f\n";
+    break;
+  }
+  o << "  movq $bool_constant_false, %rax\n";
+  o << "  jmp 2f\n";
+  o << "1:\n";
+  o << "  movq $bool_constant_true, %rax\n";
+  o << "2:\n";
 }
 
 void LessThan::print(std::ostream &o, int indent) {
@@ -388,6 +703,11 @@ Class *LessThan::type(cool::SemanticAnalyser *sa) {
                      sa->boolClass.get());
 }
 
+void LessThan::generate(cool::CodeGenerator *cg, std::ostream &o) {
+  o << "  # LESSTHAN\n";
+  int_rel_op_generate(cg, o, a.get(), b.get(), '<');
+}
+
 void Equal::print(std::ostream &o, int indent) {
   o << std::string(indent, ' ') << "="
     << " @" << loc << std::endl;
@@ -400,6 +720,11 @@ Class *Equal::type(cool::SemanticAnalyser *sa) {
                      sa->boolClass.get());
 }
 
+void Equal::generate(cool::CodeGenerator *cg, std::ostream &o) {
+  o << "  # EQUAL\n";
+  int_rel_op_generate(cg, o, a.get(), b.get(), '=');
+}
+
 void LessOrEqual::print(std::ostream &o, int indent) {
   o << std::string(indent, ' ') << "<="
     << " @" << loc << std::endl;
@@ -410,6 +735,11 @@ void LessOrEqual::print(std::ostream &o, int indent) {
 Class *LessOrEqual::type(cool::SemanticAnalyser *sa) {
   return int_op_type(sa, std::list<std::shared_ptr<Expression>>{a, b},
                      sa->boolClass.get());
+}
+
+void LessOrEqual::generate(cool::CodeGenerator *cg, std::ostream &o) {
+  o << "  # LESSOREQUAL\n";
+  int_rel_op_generate(cg, o, a.get(), b.get(), '[');
 }
 
 void Not::print(std::ostream &o, int indent) {
@@ -430,6 +760,18 @@ Class *Not::type(cool::SemanticAnalyser *sa) {
   return sa->boolClass.get();
 }
 
+void Not::generate(cool::CodeGenerator *cg, std::ostream &o) {
+  o << "  # NOT\n";
+  expr->generate(cg, o);
+  o << "  cmpq $0, 40(%rax)\n";
+  o << "  je 1f\n";
+  o << "  movq $bool_constant_false, %rax\n";
+  o << "  jmp 2f\n";
+  o << "1:\n";
+  o << "  movq $bool_constant_true, %rax\n";
+  o << "2:\n";
+}
+
 void Var::print(std::ostream &o, int indent) {
   o << std::string(indent, ' ') << name << " @" << loc << std::endl;
 }
@@ -446,11 +788,25 @@ Class *Var::type(cool::SemanticAnalyser *sa) {
   return res;
 }
 
+void Var::generate(cool::CodeGenerator *cg, std::ostream &o) {
+  o << "  # VAR " + name + "\n";
+  if (name == "self") {
+    o << "  movq %rbx, %rax\n";
+  } else {
+    o << "  movq " + cg->scope.find(name) + ", %rax\n";
+  }
+}
+
 void IntConst::print(std::ostream &o, int indent) {
   o << std::string(indent, ' ') << value << " @" << loc << std::endl;
 }
 
 Class *IntConst::type(cool::SemanticAnalyser *sa) { return sa->intClass.get(); }
+
+void IntConst::generate(cool::CodeGenerator *cg, std::ostream &o) {
+  o << "  movq $int_constant_" +
+           std::to_string(cg->get_int_constant_no(value)) + ", %rax\n";
+}
 
 void StrConst::print(std::ostream &o, int indent) {
   o << std::string(indent, ' ') << "\"" << escaped() << "\""
@@ -461,27 +817,11 @@ Class *StrConst::type(cool::SemanticAnalyser *sa) {
   return sa->stringClass.get();
 }
 
-std::string StrConst::escaped() {
-  std::ostringstream o;
-  for (auto ch : value) {
-    switch (ch) {
-    case '\n':
-      o << "\\n";
-      break;
-    case '\t':
-      o << "\\t";
-      break;
-    case '\f':
-      o << "\\f";
-      break;
-    case '\b':
-      o << "\\b";
-      break;
-    default:
-      o << ch;
-    }
-  }
-  return o.str();
+std::string StrConst::escaped() { return util::escape_string(value); }
+
+void StrConst::generate(cool::CodeGenerator *cg, std::ostream &o) {
+  o << "  movq $string_constant_" +
+           std::to_string(cg->get_string_constant_no(value)) + ", %rax\n";
 }
 
 void BoolConst::print(std::ostream &o, int indent) {
@@ -490,6 +830,14 @@ void BoolConst::print(std::ostream &o, int indent) {
 
 Class *BoolConst::type(cool::SemanticAnalyser *sa) {
   return sa->boolClass.get();
+}
+
+void BoolConst::generate(cool::CodeGenerator *cg, std::ostream &o) {
+  if (value) {
+    o << "  movq $bool_constant_true, %rax\n";
+  } else {
+    o << "  movq $bool_constant_false, %rax\n";
+  }
 }
 
 void Field::print(std::ostream &o, int indent) {
@@ -505,7 +853,7 @@ bool Field::check_type(cool::SemanticAnalyser *sa) {
       return false;
     }
 
-    if (!sa->assignable(sa->name2Class[type_name].get(), expr_type)) {
+    if (!sa->assignable(type, expr_type)) {
       sa->error(get_loc(), "type error");
       return false;
     }
@@ -568,6 +916,27 @@ bool Method::check_type(cool::SemanticAnalyser *sa) {
   return true;
 }
 
+void Method::generate(cool::CodeGenerator *cg, std::ostream &o) {
+  o << "  pushq %rbp\n";
+  o << "  movq %rsp, %rbp\n";
+
+  cg->offset_rbp = 0;
+
+  cg->scope.enter();
+  int i = 0;
+  for (auto &formal : formals) {
+    auto formal_ref = std::to_string((2 + i++) * 8) + "(%rbp)";
+    cg->scope.add(formal->name, formal_ref);
+  }
+
+  expr->generate(cg, o);
+
+  cg->scope.exit();
+
+  o << "  popq %rbp\n";
+  o << "  ret\n";
+}
+
 void Class::print(std::ostream &o, int indent) {
   o << std::string(indent, ' ') << name;
   if (!parent_name.empty()) {
@@ -610,6 +979,16 @@ Method *Class::get_method(std::string name) {
   return cls->name2Method[name];
 }
 
+Field *Class::get_field(std::string name) {
+  if (name2Field.find(name) != name2Field.end()) {
+    return name2Field[name];
+  }
+  if (parent) {
+    return parent->get_field(name);
+  }
+  return nullptr;
+}
+
 void Class::check_type(cool::SemanticAnalyser *sa) {
   bool err = false;
   for (auto &feature : features) {
@@ -638,6 +1017,65 @@ void Class::check_type(cool::SemanticAnalyser *sa) {
   }
 
   sa->scope.exit();
+}
+
+void Class::arrange() {
+  auto init_block =
+      std::make_shared<Block>(std::list<std::shared_ptr<Expression>>{});
+
+  if (parent) {
+    fields_ordered = parent->fields_ordered;
+    fields_numbered = parent->fields_numbered;
+  }
+
+  for (auto it = name2Field.begin(); it != name2Field.end(); ++it) {
+    fields_numbered[it->first] = fields_ordered.size();
+    fields_ordered.push_back(it->first);
+
+    auto field = it->second;
+    if (!std::dynamic_pointer_cast<Void>(field->expr)) {
+      init_block->expressions.push_back(
+          std::make_shared<Assign>(field->name, field->expr));
+    }
+  }
+
+  if (parent) {
+    methods_ordered = parent->methods_ordered;
+    methods_resolved = parent->methods_resolved;
+
+    auto invoke = std::make_shared<Invoke>(
+        std::make_shared<Var>("self"), parent->name, cool::init_method_name,
+        std::list<std::shared_ptr<Expression>>{});
+    invoke->expr_sa = invoke->expr;
+    invoke->type_sa = parent;
+
+    init_block->expressions.push_front(invoke);
+  }
+
+  init_block->expressions.push_back(std::make_shared<Var>("self"));
+
+  // synthesize the `__init__` method
+  init_method = std::make_shared<Method>(cool::init_method_name,
+                                         std::list<std::shared_ptr<Formal>>{},
+                                         "SELF_TYPE", init_block);
+  name2Method[cool::init_method_name] = init_method.get();
+
+  for (auto it = name2Method.begin(); it != name2Method.end(); ++it) {
+    auto name = it->first;
+    if (methods_resolved.find(name) == methods_resolved.end()) {
+      methods_ordered.push_back(name);
+    }
+    methods_resolved[name] = this;
+  }
+
+  int i = 0;
+  for (auto &name : methods_ordered) {
+    methods_numbered[name] = i++;
+  }
+
+  for (auto &child : children) {
+    child->arrange();
+  }
 }
 
 void Program::print(std::ostream &o) {

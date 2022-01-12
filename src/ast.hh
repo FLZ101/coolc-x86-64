@@ -10,7 +10,8 @@
 
 namespace cool {
 class SemanticAnalyser;
-}
+class CodeGenerator;
+} // namespace cool
 
 namespace ast {
 
@@ -31,7 +32,8 @@ protected:
 
 class Expression : public Node {
 public:
-  virtual Class *type(cool::SemanticAnalyser *sa) { return nullptr; };
+  virtual Class *type(cool::SemanticAnalyser *sa) { return nullptr; }
+  virtual void generate(cool::CodeGenerator *cg, std::ostream &o) {}
 };
 
 class Void : public Expression {};
@@ -49,6 +51,10 @@ public:
   // --- sa ---
 public:
   Class *type(cool::SemanticAnalyser *sa) override;
+
+  // --- cg ---
+public:
+  void generate(cool::CodeGenerator *cg, std::ostream &o) override;
 };
 
 class Invoke : public Expression {
@@ -67,11 +73,14 @@ public:
 
   // --- sa ---
 public:
-  std::shared_ptr<Expression> expr2;
-  Class *type2;
-  Method *method;
+  std::shared_ptr<Expression> expr_sa;
+  Class *type_sa;
 
   Class *type(cool::SemanticAnalyser *sa) override;
+
+  // --- cg ---
+public:
+  void generate(cool::CodeGenerator *cg, std::ostream &o) override;
 };
 
 class If : public Expression {
@@ -87,6 +96,10 @@ public:
   // --- sa ---
 public:
   Class *type(cool::SemanticAnalyser *sa) override;
+
+  // --- cg ---
+public:
+  void generate(cool::CodeGenerator *cg, std::ostream &o) override;
 };
 
 class While : public Expression {
@@ -101,6 +114,10 @@ public:
   // --- sa ---
 public:
   Class *type(cool::SemanticAnalyser *sa) override;
+
+  // --- cg ---
+public:
+  void generate(cool::CodeGenerator *cg, std::ostream &o) override;
 };
 
 class Block : public Expression {
@@ -115,6 +132,10 @@ public:
   // --- sa ---
 public:
   Class *type(cool::SemanticAnalyser *sa) override;
+
+  // --- cg ---
+public:
+  void generate(cool::CodeGenerator *cg, std::ostream &o) override;
 };
 
 class Let : public Expression {
@@ -133,6 +154,11 @@ public:
   // --- sa ---
 public:
   Class *type(cool::SemanticAnalyser *sa) override;
+
+  // --- cg ---
+public:
+  void generate(cool::CodeGenerator *cg, std::ostream &o) override;
+  std::shared_ptr<Expression> expr_cg;
 };
 
 class CaseBranch : public Node {
@@ -146,6 +172,11 @@ public:
   std::string name;
   std::string type_name;
   std::shared_ptr<Expression> expr;
+
+  // --- sa ---
+public:
+  Class *type;
+  Class *expr_type;
 };
 
 class Case : public Expression {
@@ -162,6 +193,10 @@ public:
   // --- sa ---
 public:
   Class *type(cool::SemanticAnalyser *sa) override;
+
+  // --- cg ---
+public:
+  void generate(cool::CodeGenerator *cg, std::ostream &o) override;
 };
 
 class New : public Expression {
@@ -175,6 +210,11 @@ public:
   // --- sa ---
 public:
   Class *type(cool::SemanticAnalyser *sa) override;
+  Class *type_sa;
+
+  // --- cg ---
+public:
+  void generate(cool::CodeGenerator *cg, std::ostream &o) override;
 };
 
 class IsVoid : public Expression {
@@ -188,6 +228,10 @@ public:
   // --- sa ---
 public:
   Class *type(cool::SemanticAnalyser *sa) override;
+
+  // --- cg ---
+public:
+  void generate(cool::CodeGenerator *cg, std::ostream &o) override;
 };
 
 class Add : public Expression {
@@ -202,6 +246,10 @@ public:
   // --- sa ---
 public:
   Class *type(cool::SemanticAnalyser *sa) override;
+
+  // --- cg ---
+public:
+  void generate(cool::CodeGenerator *cg, std::ostream &o) override;
 };
 
 class Sub : public Expression {
@@ -216,6 +264,10 @@ public:
   // --- sa ---
 public:
   Class *type(cool::SemanticAnalyser *sa) override;
+
+  // --- cg ---
+public:
+  void generate(cool::CodeGenerator *cg, std::ostream &o) override;
 };
 
 class Mul : public Expression {
@@ -230,6 +282,10 @@ public:
   // --- sa ---
 public:
   Class *type(cool::SemanticAnalyser *sa) override;
+
+  // --- cg ---
+public:
+  void generate(cool::CodeGenerator *cg, std::ostream &o) override;
 };
 
 class Div : public Expression {
@@ -244,6 +300,10 @@ public:
   // --- sa ---
 public:
   Class *type(cool::SemanticAnalyser *sa) override;
+
+  // --- cg ---
+public:
+  void generate(cool::CodeGenerator *cg, std::ostream &o) override;
 };
 
 class Neg : public Expression {
@@ -257,6 +317,10 @@ public:
   // --- sa ---
 public:
   Class *type(cool::SemanticAnalyser *sa) override;
+
+  // --- cg ---
+public:
+  void generate(cool::CodeGenerator *cg, std::ostream &o) override;
 };
 
 class LessThan : public Expression {
@@ -271,6 +335,10 @@ public:
   // --- sa ---
 public:
   Class *type(cool::SemanticAnalyser *sa) override;
+
+  // --- cg ---
+public:
+  void generate(cool::CodeGenerator *cg, std::ostream &o) override;
 };
 
 class Equal : public Expression {
@@ -285,6 +353,10 @@ public:
   // --- sa ---
 public:
   Class *type(cool::SemanticAnalyser *sa) override;
+
+  // --- cg ---
+public:
+  void generate(cool::CodeGenerator *cg, std::ostream &o) override;
 };
 
 class LessOrEqual : public Expression {
@@ -299,6 +371,10 @@ public:
   // --- sa ---
 public:
   Class *type(cool::SemanticAnalyser *sa) override;
+
+  // --- cg ---
+public:
+  void generate(cool::CodeGenerator *cg, std::ostream &o) override;
 };
 
 class Not : public Expression {
@@ -312,6 +388,10 @@ public:
   // --- sa ---
 public:
   Class *type(cool::SemanticAnalyser *sa) override;
+
+  // --- cg ---
+public:
+  void generate(cool::CodeGenerator *cg, std::ostream &o) override;
 };
 
 class Var : public Expression {
@@ -325,6 +405,10 @@ public:
   // --- sa ---
 public:
   Class *type(cool::SemanticAnalyser *sa) override;
+
+  // --- cg ---
+public:
+  void generate(cool::CodeGenerator *cg, std::ostream &o) override;
 };
 
 class IntConst : public Expression {
@@ -338,6 +422,10 @@ public:
   // --- sa ---
 public:
   Class *type(cool::SemanticAnalyser *sa) override;
+
+  // --- cg ---
+public:
+  void generate(cool::CodeGenerator *cg, std::ostream &o) override;
 };
 
 class StrConst : public Expression {
@@ -353,6 +441,10 @@ public:
   // --- sa ---
 public:
   Class *type(cool::SemanticAnalyser *sa) override;
+
+  // --- cg ---
+public:
+  void generate(cool::CodeGenerator *cg, std::ostream &o) override;
 };
 
 class BoolConst : public Expression {
@@ -366,6 +458,10 @@ public:
   // --- sa ---
 public:
   Class *type(cool::SemanticAnalyser *sa) override;
+
+  // --- cg ---
+public:
+  void generate(cool::CodeGenerator *cg, std::ostream &o) override;
 };
 
 class Feature : public Node {};
@@ -385,6 +481,8 @@ public:
   // --- sa ---
 public:
   bool check_type(cool::SemanticAnalyser *sa);
+
+  Class *type;
 };
 
 class Formal : public Node {
@@ -416,13 +514,18 @@ public:
 public:
   bool same_signature(Method *other);
   bool check_type(cool::SemanticAnalyser *sa);
+
+  // --- cg ---
+public:
+  void generate(cool::CodeGenerator *cg, std::ostream &o);
 };
 
 class Class : public Node {
 public:
   Class(std::string name, std::string parent_name,
         std::list<std::shared_ptr<Feature>> features)
-      : name(name), parent_name(parent_name), features(features) {}
+      : name(name), parent_name(parent_name), features(features),
+        parent(nullptr), id(0) {}
 
   void print(std::ostream &o, int indent) override;
 
@@ -447,6 +550,23 @@ public:
 
   std::map<std::string, Field *> name2Field;
   std::map<std::string, Method *> name2Method;
+
+  // --- cg ---
+public:
+  Field *get_field(std::string name);
+
+  void arrange();
+
+  int id;
+
+  std::shared_ptr<Method> init_method;
+
+  std::list<std::string> methods_ordered;
+  std::map<std::string, int> methods_numbered;
+  std::map<std::string, Class *> methods_resolved;
+
+  std::list<std::string> fields_ordered;
+  std::map<std::string, int> fields_numbered;
 };
 
 class Program {
@@ -457,6 +577,9 @@ public:
 
   std::list<std::shared_ptr<Class>> classes;
 };
+
+// --- cg ---
+void new_generate(cool::CodeGenerator *cg, std::ostream &o, Class *cls);
 
 } /* namespace ast */
 

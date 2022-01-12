@@ -4,7 +4,7 @@ all: build
 
 build: coolc
 
-SRCS := cool.l.cc cool.y.cc ast.cc parser.cc main.cc sa.cc
+SRCS := cool.l.cc cool.y.cc util.cc ast.cc parser.cc main.cc sa.cc cg.cc
 OBJS := $(patsubst %.cc,%.o,$(SRCS))
 DEPS := $(patsubst %.cc,%.d,$(SRCS))
 

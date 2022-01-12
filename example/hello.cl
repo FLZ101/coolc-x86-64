@@ -1,5 +1,6 @@
 class Main inherits IO {
-    main(): SELF_TYPE {
-        out_string("Hello, World.\n")
-    };
+    main(): Int {{
+        out_string("Hello, World.\n"); -- Hello, World.
+        0;
+    }};
 };

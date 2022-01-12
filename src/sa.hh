@@ -10,16 +10,41 @@
 
 namespace cool {
 
-class Scope {
+template <typename T> class Scope {
 public:
   Scope &enter();
   Scope &exit();
-  Scope &add(std::string k, ast::Class *v);
-  ast::Class *find(std::string k);
+  Scope &add(std::string k, T v);
+  T find(std::string k);
 
 private:
-  std::list<std::shared_ptr<std::map<std::string, ast::Class *>>> chain;
+  std::list<std::shared_ptr<std::map<std::string, T>>> chain;
 };
+
+template <typename T> Scope<T> &Scope<T>::enter() {
+  chain.push_back(std::make_shared<std::map<std::string, T>>());
+  return *this;
+}
+
+template <typename T> Scope<T> &Scope<T>::exit() {
+  chain.pop_back();
+  return *this;
+}
+
+template <typename T> Scope<T> &Scope<T>::add(std::string k, T v) {
+  chain.back()->operator[](k) = v;
+  return *this;
+}
+
+template <typename T> T Scope<T>::find(std::string k) {
+  for (auto it = chain.crbegin(); it != chain.crend(); ++it) {
+    auto m = it->get();
+    if (m->find(k) != m->end()) {
+      return m->operator[](k);
+    }
+  }
+  return nullptr;
+}
 
 class SemanticError : public std::runtime_error {
 public:
@@ -28,7 +53,7 @@ public:
 
 class SemanticAnalyser {
 public:
-  SemanticAnalyser(std::shared_ptr<ast::Program> program);
+  SemanticAnalyser(ast::Program *program);
 
   void analyse();
 
@@ -39,7 +64,7 @@ public:
 
   bool assignable(ast::Class *left, ast::Class *right);
 
-  Scope scope;
+  Scope<ast::Class *> scope;
 
   std::map<std::string, std::shared_ptr<ast::Class>> name2Class;
 
@@ -49,9 +74,11 @@ public:
 
   // built-in classes
   std::vector<std::shared_ptr<ast::Class>> builtin;
-  std::shared_ptr<ast::Class> nullClass, errorClass;
+  std::shared_ptr<ast::Class> errorClass;
   std::shared_ptr<ast::Class> objectClass, stringClass, intClass, boolClass,
       ioClass;
+
+  std::vector<std::shared_ptr<ast::Class>> classes;
 
 private:
   int nerrs;
@@ -60,7 +87,7 @@ private:
   void build_and_check_class_hierarchy();
   void check_type();
 
-  std::shared_ptr<ast::Program> program;
+  ast::Program *program;
 };
 
 } // namespace cool

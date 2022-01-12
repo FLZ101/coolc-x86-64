@@ -4,36 +4,8 @@
 
 namespace cool {
 
-Scope &Scope::enter() {
-  chain.push_back(std::make_shared<std::map<std::string, ast::Class *>>());
-  return *this;
-}
-
-Scope &Scope::exit() {
-  chain.pop_back();
-  return *this;
-}
-
-Scope &Scope::add(std::string k, ast::Class *v) {
-  chain.back()->operator[](k) = v;
-  return *this;
-}
-
-ast::Class *Scope::find(std::string k) {
-  for (auto it = chain.crbegin(); it != chain.crend(); ++it) {
-    auto m = it->get();
-    if (m->find(k) != m->end()) {
-      return m->operator[](k);
-    }
-  }
-  return nullptr;
-}
-
-SemanticAnalyser::SemanticAnalyser(std::shared_ptr<ast::Program> program)
+SemanticAnalyser::SemanticAnalyser(ast::Program *program)
     : program(program), nerrs(0) {
-
-  nullClass = std::make_shared<ast::Class>(
-      "null", "", std::list<std::shared_ptr<ast::Feature>>{});
 
   errorClass = std::make_shared<ast::Class>(
       "error", "", std::list<std::shared_ptr<ast::Feature>>{});
@@ -45,7 +17,7 @@ SemanticAnalyser::SemanticAnalyser(std::shared_ptr<ast::Program> program)
               "copy", std::list<std::shared_ptr<ast::Formal>>{}, "SELF_TYPE",
               std::shared_ptr<ast::Void>()),
           std::make_shared<ast::Method>(
-              "abort", std::list<std::shared_ptr<ast::Formal>>{}, "null",
+              "abort", std::list<std::shared_ptr<ast::Formal>>{}, "Object",
               std::shared_ptr<ast::Void>()),
           std::make_shared<ast::Method>(
               "type_name", std::list<std::shared_ptr<ast::Formal>>{}, "String",
@@ -85,10 +57,8 @@ SemanticAnalyser::SemanticAnalyser(std::shared_ptr<ast::Program> program)
       "IO", "",
       std::list<std::shared_ptr<ast::Feature>>{
           std::make_shared<ast::Method>(
-              "in_string",
-              std::list<std::shared_ptr<ast::Formal>>{
-                  std::make_shared<ast::Formal>("x", "String")},
-              "String", std::shared_ptr<ast::Void>()),
+              "in_string", std::list<std::shared_ptr<ast::Formal>>{}, "String",
+              std::shared_ptr<ast::Void>()),
           std::make_shared<ast::Method>(
               "out_string",
               std::list<std::shared_ptr<ast::Formal>>{
@@ -96,7 +66,7 @@ SemanticAnalyser::SemanticAnalyser(std::shared_ptr<ast::Program> program)
               "SELF_TYPE", std::shared_ptr<ast::Void>())});
 
   builtin = std::vector<std::shared_ptr<ast::Class>>{
-      nullClass, objectClass, stringClass, intClass, boolClass, ioClass};
+      objectClass, stringClass, intClass, boolClass, ioClass};
 }
 
 void SemanticAnalyser::error(const yy::location &loc, const std::string &msg) {
@@ -151,7 +121,7 @@ void SemanticAnalyser::build_and_check_class_hierarchy() {
     parent->append_child(cls);
   };
 
-  for (auto &cls : std::vector<std::shared_ptr<ast::Class>>(builtin.begin() + 2,
+  for (auto &cls : std::vector<std::shared_ptr<ast::Class>>(builtin.begin() + 1,
                                                             builtin.end())) {
     add_class(cls.get());
   }
@@ -160,10 +130,9 @@ void SemanticAnalyser::build_and_check_class_hierarchy() {
   }
   check_errors();
 
-  name2Class["Object"]->print_hierarchy(std::cout);
-
-  auto classes = program->classes;
-  classes.insert(classes.end(), builtin.begin(), builtin.end());
+  classes = builtin;
+  classes.insert(classes.end(), program->classes.begin(),
+                 program->classes.end());
 
   for (auto &cls : classes) {
     for (auto &feature : cls->features) {
@@ -201,6 +170,8 @@ void SemanticAnalyser::build_and_check_class_hierarchy() {
 
         if (name2Class.find(field->type_name) == name2Class.end()) {
           error(method->get_loc(), "unknown type \"" + field->type_name + "\"");
+        } else {
+          field->type = name2Class[field->type_name].get();
         }
       }
     }
@@ -231,6 +202,11 @@ void SemanticAnalyser::build_and_check_class_hierarchy() {
 
   if (mainClass->name2Method.find("main") == mainClass->name2Method.end()) {
     throw SemanticError("method \"Main.main\" is not defined");
+  }
+
+  auto main_method = mainClass->name2Method["main"];
+  if (main_method->formals.size() > 0 || main_method->ret_type_name != "Int") {
+    throw SemanticError("method \"Main.main\" is invalid");
   }
 }
 

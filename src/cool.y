@@ -101,7 +101,6 @@ YY_DECL;
 
 program: classes {
     parser->program = std::make_shared<ast::Program>($1);
-    parser->nerrs = yynerrs_;
   }
   ;
 
@@ -342,5 +341,6 @@ expression: OBJECTID ASSIGN expression {
 
 void yy::Parser::error (const location_type& loc, const std::string& msg)
 {
-    std::cerr << loc << ": " << msg << std::endl;
+  parser->nerrs++;
+  std::cerr << loc << ": " << msg << std::endl;
 }

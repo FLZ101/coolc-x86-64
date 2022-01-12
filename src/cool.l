@@ -183,7 +183,7 @@
   RETURN(yy::Parser::token::BOOL_CONST);
 }
 
-[+-]?[1-9][0-9]* {
+[0-9]+ {
   yylval->emplace<int>(std::stoi(yytext));
   RETURN(yy::Parser::token::INT_CONST);
 }
