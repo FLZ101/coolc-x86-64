@@ -1,6 +1,6 @@
 class Main inherits IO {
     main(): Int {{
-        out_string("Hello, World.\n"); -- Hello, World.
+        out_string("hello world\n");
         0;
     }};
 };
