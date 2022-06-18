@@ -3,6 +3,14 @@ A [COOL](https://web.stanford.edu/class/cs143/) compiler for x86-64.
 ## Build
 
 ```
+$ flex --version
+flex 2.6.4
+
+$ bison --version
+bison (GNU Bison) 3.7.4
+```
+
+```
 $ make
 ```
 
@@ -50,14 +58,10 @@ class Main inherits IO {
     }};
 
     fib(n : Int) : Int {
-        if n <= 0 then
-            0
+        if n <= 1 then
+            n
         else
-            if n = 1 then
-                1
-            else
-                fib(n-1) + fib(n-2)
-            fi
+            fib(n-1) + fib(n-2)
         fi
     };
 };
@@ -78,4 +82,3 @@ $ test/recursion
 34
 55
 ```
-
