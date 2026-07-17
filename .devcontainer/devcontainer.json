@@ -1,0 +1,7 @@
+{
+  "name": "coolc-x86-64",
+  "build": {
+    "dockerfile": "../Containerfile",
+    "context": ".."
+  }
+}

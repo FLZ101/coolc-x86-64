@@ -1,4 +1,4 @@
-.vscode/
+/.vscode/
 *.o
 *.l.cc
 *.l.hh
@@ -6,4 +6,5 @@
 *.y.hh
 *.d
 *.gch
-coolc
+/src/location.hh
+/src/coolc
